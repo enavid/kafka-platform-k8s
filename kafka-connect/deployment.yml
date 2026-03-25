@@ -1,0 +1,193 @@
+# ==============================================================================
+# Kafka Connect — Confluent with Datagen
+# Image: cnfldemos/cp-server-connect-datagen:0.6.4-7.6.0
+# ==============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-connect-svc
+  namespace: kafka-platform
+  labels:
+    app: kafka-connect
+    component: kafka-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-connect
+  template:
+    metadata:
+      labels:
+        app: kafka-connect
+        component: kafka-platform
+    spec:
+      volumes:
+        - name: kafka-jks
+          secret:
+            secretName: kafka-client-jks
+        - name: connect-data
+          emptyDir: {}
+        - name: connect-plugins
+          emptyDir: {}
+      containers:
+        - name: kafka-connect
+          image: cnfldemos/cp-server-connect-datagen:0.6.4-7.6.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8083
+          resources:
+            requests:
+              memory: 1Gi
+              cpu: "0.5"
+            limits:
+              memory: 2Gi
+              cpu: "1.0"
+          env:
+            # Bootstrap
+            - name: CONNECT_BOOTSTRAP_SERVERS
+              value: "kafka-platform-kafka-bootstrap.kafka-platform.svc.cluster.local:9092"
+            - name: CONNECT_REST_ADVERTISED_HOST_NAME
+              value: "kafka-connect"
+            - name: CONNECT_REST_PORT
+              value: "8083"
+
+            # Group
+            - name: CONNECT_GROUP_ID
+              value: "compose-connect-group"
+
+            # Internal Topics
+            - name: CONNECT_CONFIG_STORAGE_TOPIC
+              value: "docker-connect-configs"
+            - name: CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR
+              value: "1"
+            - name: CONNECT_OFFSET_FLUSH_INTERVAL_MS
+              value: "10000"
+            - name: CONNECT_OFFSET_STORAGE_TOPIC
+              value: "docker-connect-offsets"
+            - name: CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR
+              value: "1"
+            - name: CONNECT_STATUS_STORAGE_TOPIC
+              value: "docker-connect-status"
+            - name: CONNECT_STATUS_STORAGE_REPLICATION_FACTOR
+              value: "1"
+
+            # Converters
+            - name: CONNECT_KEY_CONVERTER
+              value: "org.apache.kafka.connect.storage.StringConverter"
+            - name: CONNECT_VALUE_CONVERTER
+              value: "io.confluent.connect.avro.AvroConverter"
+            - name: CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL
+              value: "http://kafka-schema-registry.kafka-platform.svc.cluster.local:8081"
+
+            # SSL to Kafka
+            - name: CONNECT_SECURITY_PROTOCOL
+              value: "SSL"
+            - name: CONNECT_SSL_TRUSTSTORE_LOCATION
+              value: "/etc/kafka/secrets/kafka.client.truststore.jks"
+            - name: CONNECT_SSL_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-jks-password
+                  key: password
+            - name: CONNECT_SSL_KEYSTORE_LOCATION
+              value: "/etc/kafka/secrets/kafka.client.keystore.jks"
+            - name: CONNECT_SSL_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-jks-password
+                  key: password
+            - name: CONNECT_SSL_KEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-jks-password
+                  key: password
+            - name: CONNECT_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM
+              value: ""
+
+            # Producer SSL
+            - name: CONNECT_PRODUCER_SECURITY_PROTOCOL
+              value: "SSL"
+            - name: CONNECT_PRODUCER_SSL_TRUSTSTORE_LOCATION
+              value: "/etc/kafka/secrets/kafka.client.truststore.jks"
+            - name: CONNECT_PRODUCER_SSL_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-jks-password
+                  key: password
+            - name: CONNECT_PRODUCER_SSL_KEYSTORE_LOCATION
+              value: "/etc/kafka/secrets/kafka.client.keystore.jks"
+            - name: CONNECT_PRODUCER_SSL_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-jks-password
+                  key: password
+            - name: CONNECT_PRODUCER_SSL_KEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-jks-password
+                  key: password
+            - name: CONNECT_PRODUCER_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM
+              value: ""
+
+            # Consumer SSL
+            - name: CONNECT_CONSUMER_SECURITY_PROTOCOL
+              value: "SSL"
+            - name: CONNECT_CONSUMER_SSL_TRUSTSTORE_LOCATION
+              value: "/etc/kafka/secrets/kafka.client.truststore.jks"
+            - name: CONNECT_CONSUMER_SSL_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-jks-password
+                  key: password
+            - name: CONNECT_CONSUMER_SSL_KEYSTORE_LOCATION
+              value: "/etc/kafka/secrets/kafka.client.keystore.jks"
+            - name: CONNECT_CONSUMER_SSL_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-jks-password
+                  key: password
+            - name: CONNECT_CONSUMER_SSL_KEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-jks-password
+                  key: password
+            - name: CONNECT_CONSUMER_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM
+              value: ""
+
+            # Plugin Path
+            - name: CONNECT_PLUGIN_PATH
+              value: "/usr/share/java,/usr/share/confluent-hub-components"
+
+            # Logging
+            - name: CONNECT_LOG4J_ROOT_LOGLEVEL
+              value: "WARN"
+            - name: CONNECT_LOG4J_LOGGERS
+              value: "org.apache.kafka.connect.runtime.rest=ERROR,org.reflections=ERROR,org.apache.kafka.clients=ERROR"
+            - name: CONNECT_LOG4J_APPENDER_STDOUT_LAYOUT_CONVERSIONPATTERN
+              value: "[%d] %p %m (%c)%n"
+
+          volumeMounts:
+            - name: kafka-jks
+              mountPath: /etc/kafka/secrets
+              readOnly: true
+            - name: connect-data
+              mountPath: /data
+            - name: connect-plugins
+              mountPath: /usr/share/confluent-hub-components
+
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8083
+            initialDelaySeconds: 180
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8083
+            initialDelaySeconds: 120
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
