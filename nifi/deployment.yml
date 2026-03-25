@@ -1,0 +1,160 @@
+# ==============================================================================
+# Apache NiFi 2.8.0
+# Image: apache/nifi:2.8.0
+#
+# Notes:
+#   - conf directory is NOT mounted (NiFi manages it internally)
+#   - Only data directories are persisted via PVCs
+#   - Kafka JKS certs mounted from kafka-client-jks secret
+# ==============================================================================
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nifi
+  namespace: kafka-platform
+  labels:
+    app: nifi
+    component: kafka-platform
+spec:
+  serviceName: nifi
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nifi
+  template:
+    metadata:
+      labels:
+        app: nifi
+        component: kafka-platform
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      volumes:
+        - name: kafka-jks
+          secret:
+            secretName: kafka-client-jks
+      containers:
+        - name: nifi
+          image: apache/nifi:2.8.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8443
+              name: https
+          resources:
+            requests:
+              memory: 2Gi
+              cpu: "0.5"
+            limits:
+              memory: 6Gi
+              cpu: "2.0"
+          env:
+            - name: SINGLE_USER_CREDENTIALS_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: nifi-credentials
+                  key: username
+            - name: SINGLE_USER_CREDENTIALS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nifi-credentials
+                  key: password
+            - name: NIFI_WEB_HTTPS_HOST
+              value: "0.0.0.0"
+            - name: NIFI_WEB_HTTPS_PORT
+              value: "8443"
+            - name: NIFI_WEB_HTTP_PORT
+              value: ""
+            - name: NIFI_WEB_PROXY_HOST
+              value: "nifi.arezoupardaz.com:443,nifi.arezoupardaz.com"
+            - name: NIFI_JVM_HEAP_INIT
+              value: "1g"
+            - name: NIFI_JVM_HEAP_MAX
+              value: "4g"
+            - name: NIFI_CLUSTER_IS_NODE
+              value: "false"
+            - name: TZ
+              value: "Asia/Tehran"
+
+          volumeMounts:
+            - name: kafka-jks
+              mountPath: /opt/nifi/kafka-certs
+              readOnly: true
+            - name: nifi-database
+              mountPath: /opt/nifi/nifi-current/database_repository
+            - name: nifi-flowfile
+              mountPath: /opt/nifi/nifi-current/flowfile_repository
+            - name: nifi-content
+              mountPath: /opt/nifi/nifi-current/content_repository
+            - name: nifi-provenance
+              mountPath: /opt/nifi/nifi-current/provenance_repository
+            - name: nifi-state
+              mountPath: /opt/nifi/nifi-current/state
+            - name: nifi-logs
+              mountPath: /opt/nifi/nifi-current/logs
+
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - curl -kf https://localhost:8443/nifi > /dev/null 2>&1
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 15
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - curl -kf https://localhost:8443/nifi > /dev/null 2>&1
+            initialDelaySeconds: 90
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 3
+
+  volumeClaimTemplates:
+    - metadata:
+        name: nifi-database
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+    - metadata:
+        name: nifi-flowfile
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+    - metadata:
+        name: nifi-content
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 20Gi
+    - metadata:
+        name: nifi-provenance
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+    - metadata:
+        name: nifi-state
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+    - metadata:
+        name: nifi-logs
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi

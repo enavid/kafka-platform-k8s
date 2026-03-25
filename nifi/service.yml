@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nifi
+  namespace: kafka-platform
+  labels:
+    app: nifi
+    component: kafka-platform
+spec:
+  selector:
+    app: nifi
+  ports:
+    - name: https
+      port: 8443
+      targetPort: 8443
+  type: ClusterIP
