@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-rest-proxy
+  namespace: kafka-platform
+  labels:
+    app: kafka-rest-proxy
+    component: kafka-platform
+spec:
+  selector:
+    app: kafka-rest-proxy
+  ports:
+    - name: http
+      port: 8082
+      targetPort: 8082
+  type: ClusterIP

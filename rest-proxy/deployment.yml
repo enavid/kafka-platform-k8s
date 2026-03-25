@@ -1,0 +1,96 @@
+# ==============================================================================
+# Kafka REST Proxy — Confluent Community Edition
+# Image: confluentinc/cp-kafka-rest:8.0.0
+# ==============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-rest-proxy
+  namespace: kafka-platform
+  labels:
+    app: kafka-rest-proxy
+    component: kafka-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-rest-proxy
+  template:
+    metadata:
+      labels:
+        app: kafka-rest-proxy
+        component: kafka-platform
+    spec:
+      volumes:
+        - name: kafka-jks
+          secret:
+            secretName: kafka-client-jks
+      containers:
+        - name: kafka-rest-proxy
+          image: confluentinc/cp-kafka-rest:8.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8082
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: "0.25"
+            limits:
+              memory: 512Mi
+              cpu: "0.5"
+          env:
+            - name: KAFKA_REST_HOST_NAME
+              value: "rest-proxy"
+            - name: KAFKA_REST_BOOTSTRAP_SERVERS
+              value: "kafka-platform-kafka-bootstrap.kafka-platform.svc.cluster.local:9092"
+            - name: KAFKA_REST_LISTENERS
+              value: "http://0.0.0.0:8082"
+            - name: KAFKA_REST_SCHEMA_REGISTRY_URL
+              value: "http://kafka-schema-registry.kafka-platform.svc.cluster.local:8081"
+
+            # SSL to Kafka
+            - name: KAFKA_REST_CLIENT_SECURITY_PROTOCOL
+              value: "SSL"
+            - name: KAFKA_REST_CLIENT_SSL_TRUSTSTORE_LOCATION
+              value: "/etc/kafka/secrets/kafka.client.truststore.jks"
+            - name: KAFKA_REST_CLIENT_SSL_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-jks-password
+                  key: password
+            - name: KAFKA_REST_CLIENT_SSL_KEYSTORE_LOCATION
+              value: "/etc/kafka/secrets/kafka.client.keystore.jks"
+            - name: KAFKA_REST_CLIENT_SSL_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-jks-password
+                  key: password
+            - name: KAFKA_REST_CLIENT_SSL_KEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-jks-password
+                  key: password
+            - name: KAFKA_REST_CLIENT_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM
+              value: ""
+
+          volumeMounts:
+            - name: kafka-jks
+              mountPath: /etc/kafka/secrets
+              readOnly: true
+
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8082
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8082
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
