@@ -1,0 +1,129 @@
+# ==============================================================================
+# Kafka UI — provectuslabs/kafka-ui
+# ==============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-ui
+  namespace: kafka-platform
+  labels:
+    app: kafka-ui
+    component: kafka-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-ui
+  template:
+    metadata:
+      labels:
+        app: kafka-ui
+        component: kafka-platform
+    spec:
+      volumes:
+        - name: kafka-jks
+          secret:
+            secretName: kafka-client-jks
+      containers:
+        - name: kafka-ui
+          image: provectuslabs/kafka-ui:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: "0.2"
+            limits:
+              memory: 512Mi
+              cpu: "0.5"
+          env:
+            - name: DYNAMIC_CONFIG_ENABLED
+              value: "true"
+            - name: KAFKA_CLUSTERS_0_NAME
+              value: "kafka-platform"
+            - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
+              value: "kafka-platform-kafka-bootstrap.kafka-platform.svc.cluster.local:9092"
+
+            # SSL to Kafka
+            - name: KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL
+              value: "SSL"
+            - name: KAFKA_CLUSTERS_0_PROPERTIES_SSL_TRUSTSTORE_LOCATION
+              value: "/etc/kafka/secrets/kafka.client.truststore.jks"
+            - name: KAFKA_CLUSTERS_0_PROPERTIES_SSL_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-jks-password
+                  key: password
+            - name: KAFKA_CLUSTERS_0_PROPERTIES_SSL_KEYSTORE_LOCATION
+              value: "/etc/kafka/secrets/kafka.client.keystore.jks"
+            - name: KAFKA_CLUSTERS_0_PROPERTIES_SSL_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-jks-password
+                  key: password
+            - name: KAFKA_CLUSTERS_0_PROPERTIES_SSL_KEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-jks-password
+                  key: password
+            - name: KAFKA_CLUSTERS_0_PROPERTIES_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM
+              value: ""
+
+            # Schema Registry
+            - name: KAFKA_CLUSTERS_0_SCHEMAREGISTRY
+              value: "http://kafka-schema-registry.kafka-platform.svc.cluster.local:8081"
+
+            # Kafka Connect
+            - name: KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME
+              value: "kafka-connect"
+            - name: KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS
+              value: "http://kafka-connect-svc.kafka-platform.svc.cluster.local:8083"
+
+            # UI Settings
+            - name: KAFKA_CLUSTERS_0_READONLY
+              value: "false"
+            - name: KAFKA_CLUSTERS_0_AUDIT_TOPICAUDITENABLED
+              value: "true"
+            - name: KAFKA_CLUSTERS_0_AUDIT_CONSOLEAUDITENABLED
+              value: "true"
+
+            # Authentication
+            - name: AUTH_TYPE
+              value: "LOGIN_FORM"
+            - name: SPRING_SECURITY_USER_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-ui-credentials
+                  key: username
+            - name: SPRING_SECURITY_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-ui-credentials
+                  key: password
+
+            # Performance
+            - name: SERVER_MAX_HTTP_REQUEST_SIZE
+              value: "20MB"
+
+          volumeMounts:
+            - name: kafka-jks
+              mountPath: /etc/kafka/secrets
+              readOnly: true
+
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
